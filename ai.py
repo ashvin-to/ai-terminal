@@ -14,13 +14,13 @@ import dotenv
 from openai import OpenAI
 from collections import deque
 
-# ============= CROSS-PLATFORM CONFIG =============
+# Platform 
 SYSTEM = platform.system().lower()
 IS_WINDOWS = SYSTEM == 'windows'
 IS_LINUX = SYSTEM == 'linux'
 IS_MAC = SYSTEM == 'darwin'
 
-# Platform-specific paths
+# Config paths 
 if IS_WINDOWS:
     CONFIG_DIR = os.path.join(os.getenv('APPDATA', ''), 'ai_terminal')
     HISTORY_FILE = os.path.join(CONFIG_DIR, 'history.json')
@@ -30,14 +30,16 @@ else:
     HISTORY_FILE = os.path.expanduser('~/.ai_terminal_history.json')
     API_KEY_FILE = os.path.join(CONFIG_DIR, '.env')
 
-# Ensure config directory exists
+# if config dir does not exist, create it
 os.makedirs(CONFIG_DIR, exist_ok=True)
 
-MAX_HISTORY = 50
-# =================================
+MAX_HISTORY = 15 # context data 
+
 
 def get_api_key():
-    # Load from .env file
+    '''
+    Load API key from .env file
+    '''
     if os.path.exists(API_KEY_FILE):
         dotenv.load_dotenv(API_KEY_FILE)
     key = os.getenv("OPENROUTER_API_KEY")
@@ -72,7 +74,9 @@ def detect_os() -> str:
 
 os_type = detect_os()
 
-PRIMARY_MODEL = "openai/gpt-oss-120b:free"
+# add your model to your liking these are the free model make sure to check the openrouter website for the latest models and change in the models. 
+
+PRIMARY_MODEL = "qwen/qwen3-coder:free"
 FALLBACK_MODELS = [
     "google/gemma-3n-e2b-it:free",
     "deepseek/deepseek-chat-v3.1:free",
@@ -101,22 +105,22 @@ def execute_command(command: str) -> str:
         if not confirm_command(command):
             return "❌ Command aborted."
             
-        # Use the appropriate shell based on the platform
+        # shell
         shell = True
         if IS_WINDOWS:
-            # Use PowerShell for Windows
+            # powershell
             if command.startswith('cd '):
-                # Handle directory changes in Windows
+                # directory change
                 try:
                     os.chdir(command[3:].strip())
                     return f"Changed directory to {os.getcwd()}"
                 except Exception as e:
                     return f"❌ Error changing directory: {e}"
             
-            # Use PowerShell for Windows commands
+            # powershell commands
             command = f'powershell -NoProfile -Command "{command}"'
         
-        # Execute the command
+        # execute the command
         result = subprocess.run(
             command, 
             shell=shell, 
@@ -178,6 +182,9 @@ def get_system_message() -> Dict[str, str]:
     }
 
 def load_history():
+    '''
+    load the old conversation for giving the context to the model
+    '''
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE, "r") as f:
@@ -190,6 +197,7 @@ def load_history():
     return [get_system_message()]
 
 def save_history(history):
+    '''Save the history of the conversation to a file'''
     dq = deque(history, maxlen=MAX_HISTORY)
     try:
         with open(HISTORY_FILE, "w") as f:
@@ -198,6 +206,7 @@ def save_history(history):
         print(f"⚠️ Failed to save history: {e}")
 
 def get_ai_response(client, messages):
+    # model resonse
     for model in [PRIMARY_MODEL] + FALLBACK_MODELS:
         try:
             response = client.chat.completions.create(
@@ -212,6 +221,9 @@ def get_ai_response(client, messages):
     return None, None
 
 def run_once(client, user_input, history):
+    '''
+    run the model once and get the response
+    '''
     history.append({"role": "user", "content": user_input})
     print("Assistant is thinking...\n")
 
@@ -233,6 +245,9 @@ def run_once(client, user_input, history):
     save_history(history)
 
 def interactive_mode(client, history):
+    '''
+    interactive mode 
+    '''
     print("💬 Interactive mode. Type 'exit' to quit.")
     while True:
         try:
@@ -248,7 +263,7 @@ def interactive_mode(client, history):
         run_once(client, user_input, history)
 
 def main():
-    # Handle SIGINT (Ctrl+C)
+    # ctrl+c stops the execution
     signal.signal(signal.SIGINT, lambda x, y: sys.exit(0))
 
     api_key = get_api_key()
@@ -256,13 +271,13 @@ def main():
 
     history = load_history()
 
-    # CLI mode: ai "tell me something"
+    # use - ai for one time response 
     if len(sys.argv) > 1:
         user_input = " ".join(sys.argv[1:])
         run_once(client, user_input, history)
         sys.exit(0)
 
-    # Interactive mode: just `ai`
+    # use - 'ai' for interactive mode
     interactive_mode(client, history)
     save_history(history)
 
